@@ -1,0 +1,127 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User account profiling including customer, vendor, and admin details.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Unique identifier of user" },
+        "name": { "type": "string", "description": "Full name" },
+        "email": { "type": "string", "description": "Verified email address" },
+        "role": { "type": "string", "enum": ["customer", "vendor", "admin"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "email", "role"]
+    },
+    "Stall": {
+      "title": "Stall Information",
+      "description": "Stall metadata, operating hours, categories, approvals, and dynamic QR anchors.",
+      "type": "object",
+      "properties": {
+        "vendorId": { "type": "string" },
+        "stallName": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string" },
+        "isOpen": { "type": "boolean" },
+        "imageUrl": { "type": "string" },
+        "isApproved": { "type": "boolean" },
+        "avgRating": { "type": "number" },
+        "qrCodeUrl": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["vendorId", "stallName"]
+    },
+    "MenuItem": {
+      "title": "Menu Item Information",
+      "description": "Individually managed dishes, drinks, prices, and availability flags.",
+      "type": "object",
+      "properties": {
+        "itemName": { "type": "string" },
+        "description": { "type": "string" },
+        "price": { "type": "number" },
+        "imageUrl": { "type": "string" },
+        "category": { "type": "string" },
+        "available": { "type": "boolean" }
+      },
+      "required": ["itemName", "price"]
+    },
+    "Order": {
+      "title": "Order records",
+      "description": "Checkout records including tracking state, Razorpay receipt, and queue preparation times.",
+      "type": "object",
+      "properties": {
+        "customerId": { "type": "string" },
+        "stallId": { "type": "string" },
+        "items": { "type": "array" },
+        "totalPrice": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "accepted", "preparing", "completed", "cancelled"] },
+        "paymentStatus": { "type": "string", "enum": ["unpaid", "paid", "failed"] },
+        "paymentId": { "type": "string" },
+        "orderId": { "type": "string" },
+        "signature": { "type": "string" },
+        "tableId": { "type": "string" },
+        "notes": { "type": "string" },
+        "couponApplied": { "type": "string" },
+        "prepTime": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["customerId", "stallId", "items", "totalPrice", "status", "paymentStatus"]
+    },
+    "Review": {
+      "title": "Rating reviews",
+      "description": "Reviews left by customers on food quality and stall services, with replies.",
+      "type": "object",
+      "properties": {
+        "customerId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "stallId": { "type": "string" },
+        "rating": { "type": "number" },
+        "comment": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "reply": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["customerId", "stallId", "rating"]
+    },
+    "Coupon": {
+      "title": "Stall Promotions",
+      "description": "Promotional coupon discount tokens with dynamic active triggers.",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string" },
+        "type": { "type": "string", "enum": ["percent", "flat"] },
+        "value": { "type": "number" },
+        "active": { "type": "boolean" },
+        "expiresAt": { "type": "string" },
+        "stallId": { "type": "string" }
+      },
+      "required": ["code", "type", "value", "active", "stallId"]
+    }
+  },
+  "firestore": {
+    "users": {
+      "schema": "User",
+      "description": "User profiles database"
+    },
+    "stalls": {
+      "schema": "Stall",
+      "description": "Stall collections and stores"
+    },
+    "stalls/{stallId}/menu": {
+      "schema": "MenuItem",
+      "description": "Specific subcollection of store menu plates"
+    },
+    "orders": {
+      "schema": "Order",
+      "description": "Food court transactional order list"
+    },
+    "reviews": {
+      "schema": "Review",
+      "description": "Stall ratings reviews history"
+    },
+    "coupons": {
+      "schema": "Coupon",
+      "description": "Offer configurations platform side"
+    }
+  }
+}

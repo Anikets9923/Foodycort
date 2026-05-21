@@ -1,0 +1,6 @@
+{
+  "name": "QuickBite Food Court",
+  "description": "A full-stack food court ordering platform for customers and vendors with real-time updates.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
