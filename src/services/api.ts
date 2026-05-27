@@ -34,7 +34,10 @@ api.interceptors.response.use(
       if (isInvalidToken) {
         localStorage.removeItem("token");
         localStorage.removeItem("user");
-        window.location.href = "/login";
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new Event("auth-logout"));
+          window.location.href = "/login";
+        }
       }
     }
     return Promise.reject(error);

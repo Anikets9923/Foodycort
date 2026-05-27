@@ -13,8 +13,10 @@ import {
   AlertCircle, 
   CheckCircle,
   TrendingDown,
-  Info
+  Info,
+  Banknote
 } from "lucide-react";
+import OrderSuccessModal from "../../components/OrderSuccessModal";
 
 interface CartItem {
   id: string;
@@ -39,8 +41,20 @@ const CartPage: React.FC = () => {
   const [appliedCoupon, setAppliedCoupon] = useState<any | null>(null);
   const [couponError, setCouponError] = useState("");
 
-  // Razorpay payment verification references
-  const [paymentLoading, setPaymentLoading] = useState(false);
+  // Counter Cash Payment method configuration (defaulted to cash/counter payment)
+  const paymentMethod = "cash";
+  const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
+  const [successOrderInfo, setSuccessOrderInfo] = useState<{
+    orderId: string;
+    stallName: string;
+    prepTime: number;
+    totalPrice: number;
+  } | null>(null);
+
+  const handleSuccessClose = () => {
+    setIsSuccessModalOpen(false);
+    navigate("/orders");
+  };
 
   useEffect(() => {
     const savedCart = localStorage.getItem("cart");
@@ -48,15 +62,6 @@ const CartPage: React.FC = () => {
 
     const savedTable = localStorage.getItem("currentTable");
     if (savedTable) setTableId(savedTable);
-
-    // Dynamic Razorpay SDK script injection (Phase 1 popup loader)
-    const script = document.createElement("script");
-    script.src = "https://checkout.razorpay.com/v1/checkout.js";
-    script.async = true;
-    document.body.appendChild(script);
-    return () => {
-      document.body.removeChild(script);
-    };
   }, []);
 
   const updateQuantity = (id: string, delta: number) => {
@@ -121,125 +126,62 @@ const CartPage: React.FC = () => {
 
   const total = Math.max(0, subtotal + tax - discount);
 
-  // Razorpay Gate triggers (Phase 1 Payments)
+  // Counter Cash checkout handler
   const handlePaymentCheckout = async () => {
     if (cart.length === 0) return;
-    setPaymentLoading(true);
 
+    setLoading(true);
     try {
       const primaryStallId = cart[0].stallId;
       
-      // 1. Submit order intent to backend to construct Razorpay entity
-      const res = await api.post("/payment/create-order", {
-        amount: Math.round(total),
-        stallId: primaryStallId
-      });
-
-      const orderDataSim = res.data;
-
-      // 2. Setup standard Razorpay responsive window parameters
-      const options = {
-        key: "rzp_test_mockKey123", // Sandbox test credentials
-        amount: orderDataSim.amount,
-        currency: orderDataSim.currency,
-        name: "QuickBite Express",
-        description: `Food court Checkout at Table ${tableId}`,
-        image: "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&q=80&w=150",
-        order_id: orderDataSim.id,
-        
-        // This handler fires when Razorpay returns payment receipt details
-        handler: async function (response: any) {
-          setLoading(true);
-          try {
-            // Validate signature on backend
-            const verificationPayload = {
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_signature: response.razorpay_signature,
-              orderData: {
-                stallId: primaryStallId,
-                items: cart,
-                totalPrice: total,
-                tableId: tableId,
-                notes: notes,
-                couponApplied: appliedCoupon ? appliedCoupon.code : null
-              }
-            };
-
-            const verificationResult = await api.post("/payment/verify", verificationPayload);
-            
-            // Revert state
-            localStorage.removeItem("cart");
-            // Clear scanned QR tables
-            localStorage.removeItem("currentTable");
-            setCart([]);
-            addToast("Order Active", "Kitchen is preparing your meal!", "success");
-            navigate("/orders");
-          } catch (err: any) {
-            console.error("Verification verification failure:", err);
-            addToast("Payment Failure", "Failing to register signature with bank.", "error");
-          } finally {
-            setLoading(false);
-          }
-        },
-        prefill: {
-          name: user?.name || "Customer",
-          email: user?.email || "customer@quickbite.com",
-          contact: "9999999999"
-        },
-        theme: {
-          color: "#EA580C"
-        },
-        modal: {
-          ondismiss: function () {
-            addToast("Checkout Dismissed", "Payment sequence aborted by client.", "info");
-            setPaymentLoading(false);
-          }
+      // Fetch stall label details for modal display
+      let stallLabel = "Food Stall";
+      try {
+        const stallsRes = await api.get("/stalls");
+        const activeStall = stallsRes.data.find((s: any) => s.id === primaryStallId);
+        if (activeStall) {
+          stallLabel = activeStall.name;
         }
+      } catch (e) {
+        console.error("Failed to load details of stall label", e);
+      }
+
+      // Place direct cash order
+      const orderPayload = {
+        stallId: primaryStallId,
+        items: cart,
+        totalPrice: total,
+        tableId: tableId,
+        notes: notes,
+        couponApplied: appliedCoupon ? appliedCoupon.code : null,
+        prepTime: 15,
+        paymentMethod: "cash",
+        paymentStatus: "pending"
       };
 
-      // 3. Open Razorpay digital overlay
-      if ((window as any).Razorpay) {
-        const rzp = new (window as any).Razorpay(options);
-        rzp.open();
-      } else {
-        // Fallback for isolated preview spaces missing standard globals loads
-        // Auto-resolve simulation so the app is 150% functional in development frames!
-        addToast("Sandbox Auto-Pay Triggered", "Initializing Razorpay simulation sequence.", "info");
-        
-        // Automatic mock resolution
-        setTimeout(async () => {
-          try {
-            const mockVerifiedPayload = {
-              razorpay_payment_id: `pay_mock_${Date.now()}`,
-              razorpay_order_id: orderDataSim.id,
-              razorpay_signature: `sig_mock_${Date.now()}`,
-              orderData: {
-                stallId: primaryStallId,
-                items: cart,
-                totalPrice: total,
-                tableId: tableId,
-                notes: notes,
-                couponApplied: appliedCoupon ? appliedCoupon.code : null
-              }
-            };
-            await api.post("/payment/verify", mockVerifiedPayload);
-            
-            localStorage.removeItem("cart");
-            localStorage.removeItem("currentTable");
-            setCart([]);
-            navigate("/orders");
-          } catch (verErr) {
-            console.error(verErr);
-          } finally {
-            setPaymentLoading(false);
-          }
-        }, 1500);
-      }
+      const res = await api.post("/orders", orderPayload);
+      const savedOrder = res.data;
+
+      // Set metadata and open success modal
+      setSuccessOrderInfo({
+        orderId: savedOrder.id || `order_cash_${Date.now().toString().slice(-6)}`,
+        stallName: stallLabel,
+        prepTime: savedOrder.prepTime || 15,
+        totalPrice: total,
+      });
+
+      setIsSuccessModalOpen(true);
+
+      // Reset cart parameters & current table
+      localStorage.removeItem("cart");
+      localStorage.removeItem("currentTable");
+      setCart([]);
+      addToast("Order Placed", "Your cash order is registered successfully!", "success");
     } catch (err: any) {
-      console.error("Failed to boot Razorpay checkout", err);
-      addToast("Failed payment", "Check network parameters or environment setups.", "error");
-      setPaymentLoading(false);
+      console.error("Direct cash order submission error", err);
+      addToast("Failed order", err.response?.data?.message || "Verify parameters or database connections.", "error");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -434,21 +376,27 @@ const CartPage: React.FC = () => {
             {/* Pay buttons triggers */}
             <button
               onClick={handlePaymentCheckout}
-              disabled={paymentLoading || loading}
-              className="w-full bg-orange-600 text-white py-3.5 rounded-xl font-extrabold text-sm flex items-center justify-center gap-2 hover:bg-orange-700 active:scale-95 transition-all shadow-lg shadow-orange-100 dark:shadow-none"
+              disabled={loading}
+              className="w-full bg-orange-600 hover:bg-orange-700 text-white py-3.5 rounded-xl font-extrabold text-sm flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-orange-100 dark:shadow-none"
             >
-              <CreditCard className="w-5 h-5" />
-              <span>{paymentLoading ? "Authenticating Checkout..." : `Pay ₹${total.toFixed(2)} via Razorpay`}</span>
+              <Banknote className="w-5 h-5 stroke-[2.5]" />
+              <span>{loading ? "Placing Order..." : `Place Cash Counter Order (₹${total.toFixed(2)})`}</span>
             </button>
 
             <div className="flex items-center gap-2 bg-gray-50 dark:bg-zinc-800/50 p-3 rounded-xl text-[10px] text-gray-400 leading-relaxed border border-gray-100 dark:border-zinc-800">
               <Info className="w-4 h-4 text-orange-500 flex-shrink-0" />
-              <span> контакта Sandbox enabled. Authentic digital signatures verified via RSA tokens.</span>
+              <span>Secure local food ticket booking. Settle your payment physically at the stall counter when picking up your hot dishes.</span>
             </div>
           </div>
         </div>
 
       </div>
+
+      <OrderSuccessModal
+        isOpen={isSuccessModalOpen}
+        onClose={handleSuccessClose}
+        orderInfo={successOrderInfo}
+      />
 
     </div>
   );

@@ -2,7 +2,6 @@ import express from "express";
 import http from "http";
 import { Server } from "socket.io";
 import path from "path";
-import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
 import { initializeApp as initializeAppWeb } from "firebase/app";
 import { 
@@ -67,7 +66,10 @@ async function startServer() {
     if (!token) return res.status(401).json({ message: "Access denied" });
 
     jwt.verify(token, JWT_SECRET, (err: any, user: any) => {
-      if (err) return res.status(403).json({ message: "Invalid token" });
+      if (err) {
+        console.error("JWT Verification Error:", err.message || err);
+        return res.status(403).json({ message: "Invalid token" });
+      }
       req.user = user;
       next();
     });
@@ -175,7 +177,7 @@ async function startServer() {
         const token = jwt.sign(
           { id: targetId, email: "admin@quickbite.com", role: "admin" },
           JWT_SECRET,
-          { expiresIn: "10h" }
+          { expiresIn: "30d" }
         );
         return res.json({
           token,
@@ -201,7 +203,7 @@ async function startServer() {
       const token = jwt.sign(
         { id: userDoc.id, email: userData.email, role: userData.role },
         JWT_SECRET,
-        { expiresIn: "10h" }
+        { expiresIn: "30d" }
       );
 
       res.json({
@@ -281,88 +283,10 @@ async function startServer() {
     }
   });
 
-  // Razorpay Payments APIs (Phase 1 Integration with mock / live mode safeguards)
-  app.post("/api/payment/create-order", authenticateToken, async (req, res) => {
-    try {
-      const { amount, stallId } = req.body;
-      const orderIdSimulated = `order_mock_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-      
-      // Simulate Razorpay exact order receipt layout
-      res.status(201).json({
-        id: orderIdSimulated,
-        entity: "order",
-        amount: amount * 100, // in paisa
-        currency: "INR",
-        receipt: `receipt_stall_${stallId}_${Date.now()}`,
-        status: "created"
-      });
-    } catch (err: any) {
-      res.status(500).json({ message: err.message });
-    }
-  });
-
-  app.post("/api/payment/verify", authenticateToken, async (req: any, res) => {
-    try {
-      const { 
-        razorpay_payment_id, 
-        razorpay_order_id, 
-        razorpay_signature,
-        orderData
-      } = req.body;
-
-      // Real signature crypt matching template (utilises test secret or real Razorpay Key Secret if supplied)
-      const secret = process.env.RAZORPAY_KEY_SECRET || "default_razorpay_secret";
-      const hmac = crypto.createHmac("sha256", secret);
-      hmac.update(`${razorpay_order_id}|${razorpay_payment_id}`);
-      const generatedSignature = hmac.digest("hex");
-
-      const isMockOrder = razorpay_order_id.startsWith("order_mock_");
-      const signatureVerified = (generatedSignature === razorpay_signature) || isMockOrder;
-
-      if (!signatureVerified) {
-        return res.status(400).json({ message: "Invalid payment credentials or signature failed" });
-      }
-
-      // Add verified order to cloud DB database
-      const order = {
-        customerId: req.user.id,
-        customerName: req.user.name || "Customer",
-        customerEmail: req.user.email || "customer@quickbite.com",
-        stallId: orderData.stallId,
-        items: orderData.items,
-        totalPrice: orderData.totalPrice,
-        status: "pending",
-        paymentStatus: "paid",
-        paymentId: razorpay_payment_id || `pay_mock_${Date.now()}`,
-        orderId: razorpay_order_id,
-        signature: razorpay_signature || `sig_mock_${Date.now()}`,
-        tableId: orderData.tableId || "TakeAway",
-        notes: orderData.notes || "",
-        couponApplied: orderData.couponApplied || null,
-        prepTime: orderData.prepTime || 15, // estimated mins starting
-        createdAt: new Date().toISOString(),
-      };
-
-      const docRef = await addDoc(collection(db, "orders"), order);
-      
-      // Notify vendor instantly via websockets
-      io.to(orderData.stallId).emit("new-order", { id: docRef.id, ...order });
-      
-      // Generate instant user notification
-      await createNotification(req.user.id, "Payment Successful", `Your order of ₹${orderData.totalPrice.toFixed(2)} has been paid & received by the kitchen!`, "payment_success");
-      await createNotification(orderData.stallId, "New Order Received", `A new queue order has been submitted for Table ${orderData.tableId || "Takeaway"}!`, "new_order");
-
-      res.json({ id: docRef.id, ...order });
-    } catch (err: any) {
-      console.error("Payment verification failure:", err);
-      res.status(500).json({ message: err.message });
-    }
-  });
-
-  // Orders: POST (fallback for free/direct checkout orders, if requested)
+  // Orders: POST (direct checkout orders)
   app.post("/api/orders", authenticateToken, async (req: any, res) => {
     try {
-      const { stallId, items, totalPrice, tableId, notes, couponApplied, prepTime } = req.body;
+      const { stallId, items, totalPrice, tableId, notes, couponApplied, prepTime, paymentMethod, paymentStatus } = req.body;
       const order = {
         customerId: req.user.id,
         customerName: req.user.name || "Customer",
@@ -371,7 +295,8 @@ async function startServer() {
         items,
         totalPrice,
         status: "pending",
-        paymentStatus: "unpaid",
+        paymentStatus: paymentStatus || "pending",
+        paymentMethod: paymentMethod || "cash",
         tableId: tableId || "TakeAway",
         notes: notes || "",
         couponApplied: couponApplied || null,
@@ -381,8 +306,13 @@ async function startServer() {
       const docRef = await addDoc(collection(db, "orders"), order);
       io.to(stallId).emit("new-order", { id: docRef.id, ...order });
       
-      await createNotification(req.user.id, "Order Placed", `Your order of ₹${totalPrice.toFixed(2)} has been placed successfully.`, "order_created");
-      await createNotification(stallId, "New Order Received", `A new order has been received!`, "new_order");
+      if (order.paymentMethod === "cash") {
+        await createNotification(req.user.id, "Order Placed Successfully", `Your order of ₹${totalPrice.toFixed(2)} is placed! Please pay at the counter during pickup.`, "order_created");
+        await createNotification(stallId, "New Cash Order Received", `A new cash-on-counter order has been requested for Table ${tableId || "TakeAway"}!`, "new_order");
+      } else {
+        await createNotification(req.user.id, "Order Placed", `Your order of ₹${totalPrice.toFixed(2)} has been placed successfully.`, "order_created");
+        await createNotification(stallId, "New Order Received", `A new order has been received!`, "new_order");
+      }
       
       res.status(201).json({ id: docRef.id, ...order });
     } catch (err: any) {
@@ -418,12 +348,18 @@ async function startServer() {
   // Orders: Update status & queue mapping
   app.put("/api/orders/:id/status", authenticateToken, async (req: any, res) => {
     try {
-      const { status, prepTime } = req.body;
+      const { status, prepTime, paymentStatus } = req.body;
       const orderRef = firestoreDoc(db, "orders", req.params.id);
       
-      const payload: any = { status };
+      const payload: any = {};
+      if (status !== undefined) {
+        payload.status = status;
+      }
       if (prepTime !== undefined) {
         payload.prepTime = prepTime;
+      }
+      if (paymentStatus !== undefined) {
+        payload.paymentStatus = paymentStatus;
       }
       
       await updateDoc(orderRef, payload);
@@ -431,17 +367,28 @@ async function startServer() {
       const updatedOrder = updatedSnap.data();
       
       // Notify customer of update via client WebSocket rooms
-      io.to(updatedOrder?.customerId).emit("order-status-updated", { id: req.params.id, status, prepTime });
+      if (status) {
+        io.to(updatedOrder?.customerId).emit("order-status-updated", { id: req.params.id, status, prepTime });
+        
+        // Create permanent notification logs
+        await createNotification(
+          updatedOrder?.customerId, 
+          `Order ${status.toUpperCase()}`, 
+          `Your meal state status is now: ${status}${prepTime ? `. Preparing time: ${prepTime}-mins.` : ""}`, 
+          `order_${status}`
+        );
+      }
+
+      if (paymentStatus === "paid") {
+        await createNotification(
+          updatedOrder?.customerId,
+          "Payment Confirmed",
+          `We have successfully received your payment of ₹${updatedOrder?.totalPrice?.toFixed(2)} at the counter!`,
+          "payment_success"
+        );
+      }
       
-      // Create permanent notification logs
-      await createNotification(
-        updatedOrder?.customerId, 
-        `Order ${status.toUpperCase()}`, 
-        `Your meal state status is now: ${status}${prepTime ? `. Preparing time: ${prepTime}-mins.` : ""}`, 
-        `order_${status}`
-      );
-      
-      res.json({ id: req.params.id, status, prepTime });
+      res.json({ id: req.params.id, ...updatedOrder });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -812,6 +759,7 @@ async function startServer() {
 
   // --- WEB ROUTER & SPA STATIC SERVING ---
   if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({ server: { middlewareMode: true }, appType: "spa" });
     app.use(vite.middlewares);
   } else {

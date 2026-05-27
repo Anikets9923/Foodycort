@@ -70,13 +70,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const hasValidUser = savedUser && savedUser !== "null" && savedUser !== "undefined";
 
     if (hasValidToken && hasValidUser) {
+      let isExpired = false;
       try {
-        setToken(savedToken);
-        setUser(JSON.parse(savedUser));
+        const parts = savedToken.split(".");
+        if (parts.length === 3) {
+          const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
+          if (payload.exp && Date.now() >= payload.exp * 1000) {
+            isExpired = true;
+          }
+        } else {
+          isExpired = true;
+        }
       } catch (e) {
-        console.error("Failed to parse initialized user:", e);
+        isExpired = true;
+      }
+
+      if (isExpired) {
+        console.warn("Cleared expired auth session on initialization.");
         localStorage.removeItem("token");
         localStorage.removeItem("user");
+      } else {
+        try {
+          setToken(savedToken);
+          setUser(JSON.parse(savedUser));
+        } catch (e) {
+          console.error("Failed to parse initialized user:", e);
+          localStorage.removeItem("token");
+          localStorage.removeItem("user");
+        }
       }
     } else {
       // Clean up any corrupt/stale storage stubs
@@ -98,6 +119,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     setIsLoading(false);
+
+    const handleAuthLogout = () => {
+      setToken(null);
+      setUser(null);
+      setFavorites([]);
+      setNotifications([]);
+    };
+    window.addEventListener("auth-logout", handleAuthLogout);
+    return () => {
+      window.removeEventListener("auth-logout", handleAuthLogout);
+    };
   }, []);
 
   // Fetch additional data when user logins
@@ -173,27 +205,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const fetchNotifications = async () => {
     try {
       const res = await api.get("/notifications");
-      // Check if there is any new notification that wasn't in state
-      const preCount = notifications.filter(n => !n.read).length;
-      setNotifications(res.data);
-      const postCount = res.data.filter((n: any) => !n.read).length;
       
-      // If unread notifications increased, trigger sweet toast!
-      if (postCount > preCount && res.data.length > 0) {
-        const newest = res.data[0];
-        if (!newest.read) {
-          addToast(newest.title, newest.message, newest.type || "info");
+      // Ensure we have a valid array to work with
+      if (res && Array.isArray(res.data)) {
+        const preCount = Array.isArray(notifications) ? notifications.filter(n => !n.read).length : 0;
+        const incomingNotifications = res.data;
+        setNotifications(incomingNotifications);
+        
+        const postCount = incomingNotifications.filter((n: any) => !n.read).length;
+        
+        // If unread notifications increased, trigger sweet toast!
+        if (postCount > preCount && incomingNotifications.length > 0) {
+          const newest = incomingNotifications[0];
+          if (!newest.read) {
+            addToast(newest.title, newest.message, newest.type || "info");
+          }
         }
+      } else {
+        console.warn("Received invalid notifications format from backend:", res?.data);
       }
-    } catch (err) {
-      console.error("Failed to fetch notifications:", err);
+    } catch (err: any) {
+      // Log network/fetch failures gracefully without propagating uncaught promise rejections or crashing the state
+      console.warn("Gracefully handled dynamic notifications fetch sync:", err.message || err);
     }
   };
 
   const markNotificationsRead = async () => {
     try {
       await api.put("/notifications/read-all");
-      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+      setNotifications(prev => Array.isArray(prev) ? prev.map(n => ({ ...n, read: true })) : []);
     } catch (err) {
       console.error("Failed to mark notifications read:", err);
     }
@@ -214,7 +254,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setToasts(prev => prev.filter(t => t.id !== id));
   };
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const unreadCount = Array.isArray(notifications) ? notifications.filter(n => !n.read).length : 0;
 
   return (
     <AuthContext.Provider value={{ 

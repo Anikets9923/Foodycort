@@ -229,7 +229,7 @@ const Navbar: React.FC<NavbarProps> = () => {
             </div>
 
             <div className="flex-1 overflow-y-auto divide-y divide-gray-50 dark:divide-zinc-800/80">
-              {notifications.map((notif) => (
+              {(Array.isArray(notifications) ? notifications : []).map((notif) => (
                 <div 
                   key={notif.id} 
                   className={`p-4 transition-all hover:bg-orange-50/10 dark:hover:bg-orange-950/10 ${
@@ -246,7 +246,7 @@ const Navbar: React.FC<NavbarProps> = () => {
                 </div>
               ))}
 
-              {notifications.length === 0 && (
+              {(!notifications || notifications.length === 0) && (
                 <div className="py-20 text-center text-gray-400 dark:text-zinc-500">
                   <Bell className="w-10 h-10 mx-auto mb-3 stroke-1.5 opacity-50" />
                   <p className="text-sm">No notification alerts received.</p>
@@ -256,7 +256,7 @@ const Navbar: React.FC<NavbarProps> = () => {
             
             <div className="p-4 border-t border-gray-100 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-900/50 flex justify-between text-xs text-gray-400">
               <span>QuickBite Food Court System</span>
-              <span className="text-orange-600 dark:text-orange-400 font-semibold">{notifications.length} alerts</span>
+              <span className="text-orange-600 dark:text-orange-400 font-semibold">{(Array.isArray(notifications) ? notifications.length : 0)} alerts</span>
             </div>
           </div>
         </div>

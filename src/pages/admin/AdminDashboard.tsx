@@ -258,8 +258,8 @@ const AdminDashboard: React.FC = () => {
               <div className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-zinc-800/50 rounded-xl">
                 <CheckCircle className="w-5 h-5 text-green-600" />
                 <div className="text-xs">
-                  <p className="font-semibold text-gray-800 dark:text-zinc-200">Payment Escrows Monitored</p>
-                  <p className="text-gray-500 mt-0.5">Razorpay credentials and digital orders are logged automatically.</p>
+                  <p className="font-semibold text-gray-800 dark:text-zinc-200">Counter Payments Tracked</p>
+                  <p className="text-gray-500 mt-0.5">Physical cash collections and status updates are logged securely.</p>
                 </div>
               </div>
             </div>

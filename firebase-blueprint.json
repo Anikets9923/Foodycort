@@ -47,7 +47,7 @@
     },
     "Order": {
       "title": "Order records",
-      "description": "Checkout records including tracking state, Razorpay receipt, and queue preparation times.",
+      "description": "Checkout records including tracking state, desk indicators, and queue preparation times.",
       "type": "object",
       "properties": {
         "customerId": { "type": "string" },

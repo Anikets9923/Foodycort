@@ -21,6 +21,7 @@ interface Order {
   totalPrice: number;
   status: string;
   paymentStatus: string;
+  paymentMethod?: string;
   tableId?: string;
   preparationTime?: number; // Preps time estimation in minutes
   couponApplied?: string;
@@ -213,15 +214,27 @@ const CustomerOrders: React.FC = () => {
                   )}
 
                   <div className="border-t border-gray-150/80 dark:border-zinc-800/80 pt-4 flex flex-wrap justify-between items-center gap-2">
-                    <div className="text-xs">
-                      <span className="text-gray-400">Transaction receipt: </span>
-                      <span className="text-[10px] uppercase font-mono bg-green-50 dark:bg-green-950/25 px-2 py-0.5 rounded text-green-700 font-bold">
-                        Razorpay {order.paymentStatus}
-                      </span>
+                    <div className="text-xs space-y-1">
+                      <div className="flex items-center gap-1">
+                        <span className="text-gray-400">Payment Option: </span>
+                        <span className="tracking-wide text-xs font-bold text-gray-800 dark:text-zinc-200">
+                          Counter Cash
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-gray-400">Payment Status: </span>
+                        <span className={`text-[10px] uppercase font-mono font-bold px-2 py-0.5 rounded ${
+                          order.paymentStatus === "paid"
+                            ? "bg-green-100 text-green-700 dark:bg-green-955/40 dark:text-green-400 border border-green-200/45"
+                            : "bg-orange-100 text-orange-700 dark:bg-orange-955/40 dark:text-orange-450 border border-orange-200/45"
+                        }`}>
+                          {order.paymentStatus === "paid" ? "Paid" : "Pending Payment"}
+                        </span>
+                      </div>
                     </div>
                     
                     <div className="flex items-center gap-1.5 font-extrabold text-sm text-gray-950 dark:text-zinc-50">
-                      <span className="font-semibold text-gray-400 text-xs">Total paid: </span>
+                      <span className="font-semibold text-gray-400 text-xs">{order.paymentStatus === "paid" ? "Total paid: " : "Amount Due: "}</span>
                       <span className="text-base text-orange-600 dark:text-orange-400">₹{order.totalPrice.toFixed(2)}</span>
                     </div>
                   </div>
