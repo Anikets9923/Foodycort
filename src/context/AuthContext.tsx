@@ -181,8 +181,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const res = await api.get("/favorites");
       setFavorites(res.data);
-    } catch (err) {
-      console.error("Failed to fetch favorites:", err);
+    } catch (err: any) {
+      console.warn("Failed to fetch favorites:", err.message || err);
     }
   };
 
@@ -196,8 +196,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setFavorites(prev => prev.filter(id => id !== stallId));
         addToast("Removed from Favorites", "Stall has been removed from your favorites tab.", "info");
       }
-    } catch (err) {
-      console.error("Failed to toggle favorite:", err);
+    } catch (err: any) {
+      console.warn("Failed to toggle favorite:", err.message || err);
     }
   };
 

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import api from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
+import AIAssistantModal from "../../components/AIAssistantModal";
 import { 
   Search, 
   MapPin, 
@@ -45,14 +46,15 @@ const StoreFront: React.FC = () => {
   const [simulatedTable, setSimulatedTable] = useState("4");
   const [scanningCompleted, setScanningCompleted] = useState(false);
   const [scannedStallId, setScannedStallId] = useState("");
+  const [isAIOpen, setIsAIOpen] = useState(false);
 
   const fetchStalls = async () => {
     setLoading(true);
     try {
       const res = await api.get("/stalls");
       setStalls(res.data);
-    } catch (err) {
-      console.error("Failed to fetch stalls", err);
+    } catch (err: any) {
+      console.warn("Failed to fetch stalls:", err.message || err);
     } finally {
       setLoading(false);
     }
@@ -327,6 +329,25 @@ const StoreFront: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Floating AI Concierge Button */}
+      <div className="fixed bottom-6 right-6 z-40">
+        <button
+          onClick={() => setIsAIOpen(true)}
+          className="bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-700 hover:to-amber-700 text-white font-extrabold px-4 py-3.5 rounded-full shadow-2xl flex items-center gap-2 transition-all hover:scale-105 active:scale-95 group font-sans text-xs border border-orange-500/25 cursor-pointer"
+          id="ai-floating-trigger"
+        >
+          <Sparkles className="w-4 h-4 text-amber-300 animate-pulse group-hover:rotate-12 transition-transform" />
+          <span>Ask AI Concierge</span>
+          <span className="flex h-2 w-2 relative -top-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400"></span>
+          </span>
+        </button>
+      </div>
+
+      {/* AI Assistant Drawer */}
+      <AIAssistantModal isOpen={isAIOpen} onClose={() => setIsAIOpen(false)} />
 
     </div>
   );

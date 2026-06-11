@@ -306,10 +306,19 @@ const VendorOrders: React.FC = () => {
 
                       {order.status === "preparing" && (
                         <button
+                          onClick={() => updateStatus(order.id, "ready")}
+                          className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs py-3 rounded-xl hover:scale-101 active:scale-98 shadow-md transition-all"
+                        >
+                          Mark Ready (Notify Customer & Display on TV Board)
+                        </button>
+                      )}
+
+                      {order.status === "ready" && (
+                        <button
                           onClick={() => updateStatus(order.id, "completed")}
                           className="w-full bg-green-600 hover:bg-green-700 text-white font-bold text-xs py-3 rounded-xl hover:scale-101 active:scale-98 shadow-md transition-all"
                         >
-                          Mark Completed (Plate Ready / Dispatched)
+                          Mark Completed (Picked Up & Handed Over)
                         </button>
                       )}
 

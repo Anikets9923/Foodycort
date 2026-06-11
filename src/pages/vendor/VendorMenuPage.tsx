@@ -22,6 +22,7 @@ import {
   ChefHat,
   Search,
   SlidersHorizontal,
+  Sparkles,
 } from "lucide-react";
 import MenuCard from "../../components/MenuCard";
 import EditMenuModal from "../../components/EditMenuModal";
@@ -35,6 +36,10 @@ interface MenuItem {
   imageUrl?: string;
   category: string;
   available: boolean;
+  calories?: number;
+  protein?: number;
+  carbs?: number;
+  fat?: number;
 }
 
 const VendorMenuPage: React.FC = () => {
@@ -60,7 +65,14 @@ const VendorMenuPage: React.FC = () => {
     price: "",
     category: "",
     imageUrl: "",
+    calories: "",
+    protein: "",
+    carbs: "",
+    fat: "",
   });
+
+  const [rawIngredients, setRawIngredients] = useState("");
+  const [optimizing, setOptimizing] = useState(false);
 
   // Modal Control States
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
@@ -187,7 +199,7 @@ const VendorMenuPage: React.FC = () => {
     setIsSaving(true);
     try {
       const menuCollectionRef = collection(db, `stalls/${stall.id}/menu`);
-      const payload = {
+      const payload: any = {
         itemName: newItem.itemName.trim(),
         description: newItem.description.trim(),
         price: parseFloat(newItem.price),
@@ -195,6 +207,11 @@ const VendorMenuPage: React.FC = () => {
         category: newItem.category.trim(),
         available: true,
       };
+
+      if (newItem.calories) payload.calories = parseInt(newItem.calories, 10);
+      if (newItem.protein) payload.protein = parseInt(newItem.protein, 10);
+      if (newItem.carbs) payload.carbs = parseInt(newItem.carbs, 10);
+      if (newItem.fat) payload.fat = parseInt(newItem.fat, 10);
 
       await addDoc(menuCollectionRef, payload);
 
@@ -205,7 +222,12 @@ const VendorMenuPage: React.FC = () => {
         price: "",
         category: "",
         imageUrl: "",
+        calories: "",
+        protein: "",
+        carbs: "",
+        fat: "",
       });
+      setRawIngredients("");
       setIsAdding(false);
       addToast("Item Added", `Successfully added "${payload.itemName}" to your menu.`, "success");
     } catch (err: any) {
@@ -325,6 +347,74 @@ const VendorMenuPage: React.FC = () => {
           </div>
           <form onSubmit={handleAddItem} className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-4">
+              {/* AI Enhancer sub-section */}
+              <div className="bg-orange-50/50 dark:bg-orange-950/10 border border-orange-100 dark:border-orange-900/30 rounded-xl p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-xs font-extrabold uppercase tracking-widest text-orange-600 dark:text-orange-400 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>AI Copywriter & Nutrition Estimator</span>
+                  </h4>
+                  <span className="text-[10px] text-gray-400 font-mono font-medium">Gemini 3.5 Flash</span>
+                </div>
+                <p className="text-[11px] text-gray-500 mb-3">
+                  Paste comma-separated ingredients to automatically craft restaurant-grade name, sensory descriptions, and nutrient telemetry!
+                </p>
+                <div className="space-y-3">
+                  <textarea
+                    placeholder="e.g. fresh paneer cubes, thick tomato puree, butter, cashew paste, kasuri methi"
+                    value={rawIngredients}
+                    onChange={(e) => setRawIngredients(e.target.value)}
+                    className="w-full text-xs p-2.5 border border-orange-100 dark:border-orange-900/40 focus:ring-1 focus:ring-orange-500 rounded-lg bg-transparent outline-none min-h-16 resize-none placeholder:text-gray-400"
+                  />
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      disabled={optimizing || !rawIngredients.trim()}
+                      onClick={async () => {
+                        setOptimizing(true);
+                        try {
+                          const res = await api.post("/ai/vendor/optimize", {
+                            ingredients: rawIngredients,
+                            itemName: newItem.itemName
+                          });
+                          const { optimizedTitle, optimizedDescription, estimatedMacros } = res.data;
+                          
+                          setNewItem(prev => ({
+                            ...prev,
+                            itemName: optimizedTitle || prev.itemName,
+                            description: optimizedDescription || prev.description,
+                            calories: estimatedMacros?.calories?.toString() || "",
+                            protein: estimatedMacros?.protein?.toString() || "",
+                            carbs: estimatedMacros?.carbs?.toString() || "",
+                            fat: estimatedMacros?.fat?.toString() || "",
+                          }));
+                          
+                          addToast("Copywriter Success", "Created gourmet copywriting & macros estimated!", "success");
+                        } catch (err: any) {
+                          console.error(err);
+                          addToast("Enhance Failed", "AI Optimizer could not complete the request.", "error");
+                        } finally {
+                          setOptimizing(false);
+                        }
+                      }}
+                      className="bg-orange-600 hover:bg-orange-700 disabled:bg-gray-300 text-white text-[10px] uppercase tracking-wider font-extrabold px-3 py-2 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer"
+                    >
+                      {optimizing ? (
+                        <>
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          <span>Generating copy & macros...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-3 h-3 text-amber-300" />
+                          <span>AI Enhance ✨</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-sm font-semibold text-gray-700 dark:text-zinc-300 mb-1">
                   Item Name <span className="text-red-500">*</span>
@@ -384,6 +474,53 @@ const VendorMenuPage: React.FC = () => {
                   onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
                   placeholder="Describe ingredients, diet rules, cooking time details..."
                 />
+              </div>
+
+              {/* Nutritional Macros (Generated/Customizable) */}
+              <div className="bg-gray-50/50 dark:bg-zinc-900/50 p-4 rounded-xl border border-gray-150 dark:border-zinc-850 space-y-3">
+                <h4 className="text-xs font-bold text-gray-700 dark:text-zinc-300">Nutritional Telemetry (Estimated / Optional)</h4>
+                <div className="grid grid-cols-4 gap-2">
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Calories</label>
+                    <input
+                      type="number"
+                      placeholder="kcal"
+                      className="w-full px-2 py-1.5 text-xs rounded border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 focus:ring-1 focus:ring-orange-500 outline-none"
+                      value={newItem.calories}
+                      onChange={(e) => setNewItem({ ...newItem, calories: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Protein (g)</label>
+                    <input
+                      type="number"
+                      placeholder="P (g)"
+                      className="w-full px-2 py-1.5 text-xs rounded border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 focus:ring-1 focus:ring-orange-500 outline-none"
+                      value={newItem.protein}
+                      onChange={(e) => setNewItem({ ...newItem, protein: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Carbs (g)</label>
+                    <input
+                      type="number"
+                      placeholder="C (g)"
+                      className="w-full px-2 py-1.5 text-xs rounded border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 focus:ring-1 focus:ring-orange-500 outline-none"
+                      value={newItem.carbs}
+                      onChange={(e) => setNewItem({ ...newItem, carbs: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Fat (g)</label>
+                    <input
+                      type="number"
+                      placeholder="F (g)"
+                      className="w-full px-2 py-1.5 text-xs rounded border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 focus:ring-1 focus:ring-orange-500 outline-none"
+                      value={newItem.fat}
+                      onChange={(e) => setNewItem({ ...newItem, fat: e.target.value })}
+                    />
+                  </div>
+                </div>
               </div>
             </div>
 
