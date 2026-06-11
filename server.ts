@@ -15,7 +15,8 @@ import {
   getDoc, 
   updateDoc, 
   setDoc,
-  deleteDoc
+  deleteDoc,
+  writeBatch
 } from "firebase/firestore";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
@@ -317,6 +318,148 @@ async function startServer() {
       res.status(201).json({ id: docRef.id, ...order });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Unified multi-stall split checkout engine
+  app.post("/api/checkout/unified", authenticateToken, async (req: any, res) => {
+    try {
+      const { cart: groupedCart, tableId, notes, coupons, paymentMethod, paymentStatus } = req.body;
+      
+      if (!groupedCart || typeof groupedCart !== "object" || Object.keys(groupedCart).length === 0) {
+        return res.status(400).json({ message: "Cart cannot be empty for unified checkout." });
+      }
+      
+      const batch = writeBatch(db);
+      
+      const checkoutSessionRef = firestoreDoc(collection(db, "checkout_sessions"));
+      const checkoutSessionId = checkoutSessionRef.id;
+      
+      const baseOrderNum = 1000 + Math.floor(Math.random() * 9000);
+      let grandTotal = 0;
+      const shardedOrderIds: string[] = [];
+      const socketEventsToEmit: any[] = [];
+      
+      const stallKeys = Object.keys(groupedCart);
+      
+      for (let idx = 0; idx < stallKeys.length; idx++) {
+        const stallId = stallKeys[idx];
+        const items = groupedCart[stallId];
+        if (!Array.isArray(items) || items.length === 0) continue;
+        
+        // Calculate vendor-specific subtotals
+        const subtotal = items.reduce((sum: number, item: any) => sum + item.price * item.quantity, 0);
+        const tax = subtotal * 0.1; // 10% VAT
+        
+        // Calculate optional coupon discounts per stall if provided in coupons map
+        let discount = 0;
+        const couponCode = coupons && coupons[stallId] ? coupons[stallId].code : null;
+        if (coupons && coupons[stallId]) {
+          const coup = coupons[stallId];
+          if (coup.type === "percent") {
+            discount = (subtotal + tax) * (coup.value / 100);
+          } else {
+            discount = Math.min(subtotal + tax, coup.value);
+          }
+        }
+        
+        const totalForStall = Math.max(0, subtotal + tax - discount);
+        grandTotal += totalForStall;
+        
+        const suffix = String.fromCharCode(65 + (idx % 26)); // Unique letter per vendor ticket (e.g., #4321-A, #4321-B)
+        const orderNumber = `#${baseOrderNum}-${suffix}`;
+        
+        const orderRef = firestoreDoc(collection(db, "orders"));
+        const orderId = orderRef.id;
+        
+        const orderDoc = {
+          checkoutSessionId,
+          orderNumber,
+          customerId: req.user.id,
+          customerName: req.user.name || "Customer",
+          customerEmail: req.user.email || "customer@quickbite.com",
+          stallId,
+          stallName: items[0].stallName || "Vendor Stall",
+          items,
+          totalPrice: totalForStall,
+          status: "pending",
+          paymentStatus: paymentStatus || "pending",
+          paymentMethod: paymentMethod || "cash",
+          tableId: tableId || "TakeAway",
+          notes: notes || "",
+          couponApplied: couponCode,
+          prepTime: 15,
+          createdAt: new Date().toISOString()
+        };
+        
+        batch.set(orderRef, orderDoc);
+        shardedOrderIds.push(orderId);
+        
+        // Prepare socket actions to emit upon successful batch commit
+        socketEventsToEmit.push({
+          stallId,
+          orderId,
+          orderData: orderDoc
+        });
+      }
+      
+      // Set the parent checkout_sessions document inside database
+      const checkoutSessionDoc = {
+        id: checkoutSessionId,
+        customerId: req.user.id,
+        customerName: req.user.name || "Customer",
+        customerEmail: req.user.email || "customer@quickbite.com",
+        totalPrice: grandTotal,
+        paymentStatus: paymentStatus === "paid" ? "paid" : "pending_counter_payment",
+        paymentMethod: paymentMethod || "cash",
+        tableId: tableId || "TakeAway",
+        notes: notes || "",
+        createdAt: new Date().toISOString()
+      };
+      
+      batch.set(checkoutSessionRef, checkoutSessionDoc);
+      
+      // Commit the complete atomic write batch
+      await batch.commit();
+      
+      // Run socket broadcasts and notification pushes after committing
+      for (const ev of socketEventsToEmit) {
+        // Emit only to specific vendor's Socket.io room
+        io.to(ev.stallId).emit("new-order", { id: ev.orderId, ...ev.orderData });
+        
+        // Generate notifications inside the system
+        await createNotification(
+          ev.stallId,
+          "New Split Ticket Received",
+          `A split ticket ${ev.orderData.orderNumber} (₹${ev.orderData.totalPrice.toFixed(2)}) is requested for Table ${tableId || "TakeAway"}.`,
+          "new_order"
+        );
+      }
+      
+      // Send notification back to customer
+      await createNotification(
+        req.user.id,
+        "Order Split Placed Successfully",
+        `Your unified checkout order of ₹${grandTotal.toFixed(2)} split across ${shardedOrderIds.length} stalls is placed!`,
+        "order_created"
+      );
+      
+      // Notify Admin
+      await createNotification(
+        "admin",
+        "Unified Multi-Stall Order Created",
+        `A multi-stall order of ₹${grandTotal.toFixed(2)} is generated. Checkout ID: ${checkoutSessionId}`,
+        "new_order"
+      );
+      
+      return res.status(201).json({
+        checkoutSessionId,
+        grandTotal,
+        shardedOrderIds
+      });
+    } catch (err: any) {
+      console.error("Unified checkout submission error:", err);
+      return res.status(500).json({ message: err.message || "An unexpected error occurred during checkout." });
     }
   });
 

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useParams, Link, useLocation } from "react-router-dom";
 import api from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
+import { useCart } from "../../context/CartContext";
 import { 
   ArrowLeft, 
   Clock, 
@@ -67,7 +68,7 @@ const StallDetails: React.FC = () => {
   const [stall, setStall] = useState<Stall | null>(null);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [cart, setCart] = useState<any[]>([]);
+  const { addToCart: addToCartContext, totalItemsCount } = useCart();
   const [addedItems, setAddedItems] = useState<Set<string>>(new Set());
 
   // Coupons & reviews state
@@ -115,21 +116,14 @@ const StallDetails: React.FC = () => {
     };
     
     fetchDetails();
-
-    const savedCart = localStorage.getItem("cart");
-    if (savedCart) setCart(JSON.parse(savedCart));
   }, [id, tableId]);
 
   const addToCart = (item: MenuItem) => {
-    const existing = cart.find(c => c.id === item.id);
-    let newCart;
-    if (existing) {
-      newCart = cart.map(c => c.id === item.id ? { ...c, quantity: c.quantity + 1 } : c);
-    } else {
-      newCart = [...cart, { ...item, quantity: 1, stallId: id, tableId }];
-    }
-    setCart(newCart);
-    localStorage.setItem("cart", JSON.stringify(newCart));
+    addToCartContext(
+      { id: item.id, itemName: item.itemName, price: item.price },
+      id || "unknown",
+      stall?.stallName || "Vendor Stall"
+    );
     
     setAddedItems(prev => new Set(prev).add(item.id));
     addToast("Plate Added to Cart", `${item.itemName} was registered inside Cart list.`, "success");
@@ -284,7 +278,7 @@ const StallDetails: React.FC = () => {
             to="/cart" 
             className="bg-orange-600 text-white px-6 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-orange-100 dark:shadow-none hover:bg-orange-700 active:scale-95 transition-all text-center"
           >
-            Go to Checkout ({cart.length})
+            Go to Checkout ({totalItemsCount})
           </Link>
         </div>
       </div>

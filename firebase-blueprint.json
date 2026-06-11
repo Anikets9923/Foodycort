@@ -96,6 +96,23 @@
         "stallId": { "type": "string" }
       },
       "required": ["code", "type", "value", "active", "stallId"]
+    },
+    "CheckoutSession": {
+      "title": "Checkout Sessions",
+      "description": "Multi-stall shopping checkout session wrapper.",
+      "type": "object",
+      "properties": {
+        "customerId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "customerEmail": { "type": "string" },
+        "totalPrice": { "type": "number" },
+        "paymentStatus": { "type": "string" },
+        "paymentMethod": { "type": "string" },
+        "tableId": { "type": "string" },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["customerId", "totalPrice", "paymentStatus"]
     }
   },
   "firestore": {
@@ -114,6 +131,10 @@
     "orders": {
       "schema": "Order",
       "description": "Food court transactional order list"
+    },
+    "checkout_sessions": {
+      "schema": "CheckoutSession",
+      "description": "Checkout transactional session wrapper"
     },
     "reviews": {
       "schema": "Review",
