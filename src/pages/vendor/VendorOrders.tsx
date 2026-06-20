@@ -244,11 +244,37 @@ const VendorOrders: React.FC = () => {
                     </div>
 
                     {/* Order loop */}
-                    <div className="space-y-1.5 pt-2 border-t border-gray-50 dark:border-zinc-800/60">
+                    <div className="space-y-2.5 pt-2 border-t border-gray-50 dark:border-zinc-800/60">
                       {order.items.map((item, i) => (
-                        <div key={i} className="flex justify-between text-xs font-semibold">
-                          <span className="text-gray-800 dark:text-zinc-200">{item.quantity}x {item.itemName}</span>
-                          <span className="text-gray-400 font-mono text-[10px]">{item.category}</span>
+                        <div key={i} className="space-y-1 border-b border-gray-50/50 dark:border-zinc-850 last:border-b-0 pb-1.5 last:pb-0 text-left">
+                          <div className="flex justify-between text-xs font-semibold">
+                            <span className="text-gray-800 dark:text-zinc-200">{item.quantity}x {item.itemName}</span>
+                            <span className="text-gray-400 font-mono text-[10px]">{item.category}</span>
+                          </div>
+                          
+                          {/* Modifiers detail for kitchen staff */}
+                          {item.customization && (
+                            <div className="pl-4 flex flex-wrap gap-1.5 text-[10px] pt-0.5">
+                              <span className="text-orange-600 dark:text-orange-400 font-bold bg-orange-50 dark:bg-orange-950/20 px-1.5 py-0.5 rounded">
+                                Spice: {item.customization.spiceLevel}
+                              </span>
+                              {item.customization.preference && item.customization.preference !== "Standard" && (
+                                <span className="text-blue-600 dark:text-blue-400 font-bold bg-blue-50 dark:bg-blue-950/20 px-1.5 py-0.5 rounded">
+                                  Portion: {item.customization.preference}
+                                </span>
+                              )}
+                              {item.customization.addons?.map((add: any, idx: number) => (
+                                <span key={idx} className="text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-50 dark:bg-emerald-950/20 px-1.5 py-0.5 rounded">
+                                  +{add.name}
+                                </span>
+                              ))}
+                              {item.customization.specialInstructions && (
+                                <span className="text-purple-600 dark:text-purple-400 font-medium italic block w-full mt-0.5 sm:mt-1">
+                                  🔔 Note: "{item.customization.specialInstructions}"
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>

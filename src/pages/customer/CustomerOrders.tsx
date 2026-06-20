@@ -290,11 +290,37 @@ const CustomerOrders: React.FC = () => {
                         </div>
 
                         {/* Items listed in order */}
-                        <div className="bg-gray-50/50 dark:bg-zinc-950/20 p-4 rounded-2xl space-y-2">
+                        <div className="bg-gray-50/50 dark:bg-zinc-950/20 p-4 rounded-2xl space-y-2.5">
                           {order.items.map((item: any, idx: number) => (
-                            <div key={idx} className="flex justify-between text-xs font-bold text-gray-600 dark:text-zinc-450">
-                              <span>{item.quantity}x {item.itemName}</span>
-                              <span className="text-gray-900 dark:text-zinc-250">₹{(item.price * item.quantity).toFixed(2)}</span>
+                            <div key={idx} className="space-y-0.5 text-left border-b border-gray-100/50 last:border-b-0 pb-1.5 last:pb-0">
+                              <div className="flex justify-between text-xs font-bold text-gray-600 dark:text-zinc-450">
+                                <span>{item.quantity}x {item.itemName}</span>
+                                <span className="text-gray-900 dark:text-zinc-250 font-mono">₹{(item.price * item.quantity).toFixed(2)}</span>
+                              </div>
+                              
+                              {/* Customization Details */}
+                              {item.customization && (
+                                <div className="pl-4 flex flex-wrap gap-1 items-center pt-0.5">
+                                  <span className="inline-flex items-center text-[9px] font-bold px-1.5 py-0.5 rounded bg-orange-100/40 text-orange-700 dark:bg-orange-950/20 dark:text-orange-400">
+                                    🌶️ {item.customization.spiceLevel} Spice
+                                  </span>
+                                  {item.customization.preference && item.customization.preference !== "Standard" && (
+                                    <span className="inline-flex items-center text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-100/40 text-blue-700 dark:bg-blue-950/20 dark:text-blue-400">
+                                      🍽️ {item.customization.preference} Portion
+                                    </span>
+                                  )}
+                                  {item.customization.addons?.map((addon: any, aidx: number) => (
+                                    <span key={aidx} className="inline-flex items-center text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-100/40 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400">
+                                      ➕ {addon.name}
+                                    </span>
+                                  ))}
+                                  {item.customization.specialInstructions && (
+                                    <span className="text-[10px] text-gray-550 italic block w-full mt-0.5">
+                                      💡 Note: "{item.customization.specialInstructions}"
+                                    </span>
+                                  )}
+                                </div>
+                              )}
                             </div>
                           ))}
 

@@ -215,25 +215,50 @@ const CartPage: React.FC = () => {
                 <div className="space-y-4">
                   {stallItems.map((item) => (
                     <div 
-                      key={item.id} 
+                      key={item.cartItemId || item.id} 
                       className="flex items-center justify-between gap-4 transition-all"
                     >
-                      <div className="min-w-0 flex-1">
+                      <div className="min-w-0 flex-1 text-left">
                         <h4 className="font-extrabold text-gray-900 dark:text-zinc-150 truncate text-sm">{item.itemName}</h4>
+                        
+                        {/* Customization Details */}
+                        {item.customization && (
+                          <div className="mt-1 flex flex-wrap gap-1 items-center">
+                            <span className="inline-flex items-center text-[9px] font-bold px-1.5 py-0.5 rounded bg-orange-100/50 text-orange-700 dark:bg-orange-950/20 dark:text-orange-400">
+                              🌶️ {item.customization.spiceLevel} Spice
+                            </span>
+                            {item.customization.preference && item.customization.preference !== "Standard" && (
+                              <span className="inline-flex items-center text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue-100/50 text-blue-700 dark:bg-blue-950/20 dark:text-blue-400">
+                                🍽️ {item.customization.preference} Portion
+                              </span>
+                            )}
+                            {item.customization.addons?.map((addon, aidx) => (
+                              <span key={aidx} className="inline-flex items-center text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-100/50 text-emerald-700 dark:bg-emerald-950/20 dark:text-emerald-400">
+                                ➕ {addon.name} (+₹{addon.price})
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        {item.customization?.specialInstructions && (
+                          <p className="text-[10px] text-gray-500 italic mt-0.5 leading-normal">
+                            "Chef request: {item.customization.specialInstructions}"
+                          </p>
+                        )}
+                        
                         <p className="text-orange-600 dark:text-orange-400 font-extrabold text-xs mt-0.5">₹{item.price.toFixed(2)} each</p>
                       </div>
                       
-                      <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-4 flex-shrink-0">
                         <div className="flex items-center bg-gray-50 dark:bg-zinc-800/80 rounded-xl p-1 border border-gray-100 dark:border-zinc-750">
                           <button 
-                            onClick={() => updateQuantity(item.id, stallId, -1)} 
+                            onClick={() => updateQuantity(item.cartItemId || item.id, stallId, -1)} 
                             className="p-1.5 hover:text-orange-600 text-gray-400"
                           >
                             <Minus className="w-4 h-4" />
                           </button>
                           <span className="w-8 text-center font-bold text-sm text-gray-800 dark:text-zinc-200">{item.quantity}</span>
                           <button 
-                            onClick={() => updateQuantity(item.id, stallId, 1)} 
+                            onClick={() => updateQuantity(item.cartItemId || item.id, stallId, 1)} 
                             className="p-1.5 hover:text-orange-600 text-gray-400"
                           >
                             <Plus className="w-4 h-4" />
@@ -241,7 +266,7 @@ const CartPage: React.FC = () => {
                         </div>
                         
                         <button 
-                          onClick={() => removeItem(item.id, stallId)} 
+                          onClick={() => removeItem(item.cartItemId || item.id, stallId)} 
                           className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 rounded-xl transition-all"
                           title="Remove item"
                         >

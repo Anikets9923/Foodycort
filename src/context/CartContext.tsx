@@ -3,11 +3,19 @@ import { useAuth } from "./AuthContext";
 
 export interface CartItem {
   id: string;
+  cartItemId: string;
   itemName: string;
   price: number;
+  basePrice: number;
   quantity: number;
   stallId: string;
   stallName?: string;
+  customization?: {
+    spiceLevel?: string;
+    addons?: { name: string; price: number }[];
+    preference?: string; // option variant like size / type
+    specialInstructions?: string;
+  };
 }
 
 export interface GroupedCart {
@@ -16,9 +24,14 @@ export interface GroupedCart {
 
 interface CartContextType {
   cart: GroupedCart;
-  addToCart: (item: { id: string; itemName: string; price: number }, stallId: string, stallName: string) => void;
-  updateQuantity: (itemId: string, stallId: string, delta: number) => void;
-  removeItem: (itemId: string, stallId: string) => void;
+  addToCart: (
+    item: { id: string; itemName: string; price: number },
+    stallId: string,
+    stallName: string,
+    customization?: CartItem["customization"]
+  ) => void;
+  updateQuantity: (cartItemId: string, stallId: string, delta: number) => void;
+  removeItem: (cartItemId: string, stallId: string) => void;
   clearCart: () => void;
   totalItemsCount: number;
 }
@@ -51,8 +64,10 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
               if (!migrated[sId]) migrated[sId] = [];
               migrated[sId].push({
                 id: item.id,
+                cartItemId: item.cartItemId || item.id,
                 itemName: item.itemName,
                 price: item.price,
+                basePrice: item.basePrice || item.price,
                 quantity: item.quantity,
                 stallId: sId,
                 stallName: item.stallName || "Vendor Stall"
@@ -77,36 +92,50 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const addToCart = (
     item: { id: string; itemName: string; price: number },
     stallId: string,
-    stallName: string
+    stallName: string,
+    customization?: CartItem["customization"]
   ) => {
     const updatedCart = { ...cart };
     if (!updatedCart[stallId]) {
       updatedCart[stallId] = [];
     }
 
-    const existingIndex = updatedCart[stallId].findIndex((i) => i.id === item.id);
+    // Determine unique key based on customization options
+    const customHash = customization ? JSON.stringify(customization) : "";
+    const cartItemId = `${item.id}-${customHash}`;
+
+    // Calculate total price with addons included
+    let finalPrice = item.price;
+    if (customization && customization.addons) {
+      finalPrice += customization.addons.reduce((sum, addon) => sum + (addon.price || 0), 0);
+    }
+
+    const existingIndex = updatedCart[stallId].findIndex((i) => i.cartItemId === cartItemId);
     if (existingIndex > -1) {
       updatedCart[stallId][existingIndex].quantity += 1;
     } else {
       updatedCart[stallId].push({
         id: item.id,
+        cartItemId,
         itemName: item.itemName,
-        price: item.price,
+        price: finalPrice,
+        basePrice: item.price,
         quantity: 1,
         stallId,
-        stallName
+        stallName,
+        customization
       });
     }
 
     saveCart(updatedCart);
   };
 
-  const updateQuantity = (itemId: string, stallId: string, delta: number) => {
+  const updateQuantity = (cartItemId: string, stallId: string, delta: number) => {
     const updatedCart = { ...cart };
     if (!updatedCart[stallId]) return;
 
     updatedCart[stallId] = updatedCart[stallId].map((item) => {
-      if (item.id === itemId) {
+      if (item.cartItemId === cartItemId || item.id === cartItemId) {
         const newQty = Math.max(1, item.quantity + delta);
         return { ...item, quantity: newQty };
       }
@@ -116,11 +145,13 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     saveCart(updatedCart);
   };
 
-  const removeItem = (itemId: string, stallId: string) => {
+  const removeItem = (cartItemId: string, stallId: string) => {
     const updatedCart = { ...cart };
     if (!updatedCart[stallId]) return;
 
-    updatedCart[stallId] = updatedCart[stallId].filter((item) => item.id !== itemId);
+    updatedCart[stallId] = updatedCart[stallId].filter(
+      (item) => item.cartItemId !== cartItemId && item.id !== cartItemId
+    );
     if (updatedCart[stallId].length === 0) {
       delete updatedCart[stallId];
     }

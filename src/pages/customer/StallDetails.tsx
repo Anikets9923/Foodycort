@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useParams, Link, useLocation } from "react-router-dom";
+import { motion, AnimatePresence } from "motion/react";
 import api from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
 import { useCart } from "../../context/CartContext";
@@ -82,6 +83,13 @@ const StallDetails: React.FC = () => {
   const [reviewPhoto, setReviewPhoto] = useState("");
   const [submittingReview, setSubmittingReview] = useState(false);
 
+  // Customization active states
+  const [customizingItem, setCustomizingItem] = useState<MenuItem | null>(null);
+  const [spiceLevel, setSpiceLevel] = useState<string>("Medium");
+  const [portion, setPortion] = useState<string>("Standard"); // "Standard", "Double" (+40), "Diet"
+  const [selectedAddons, setSelectedAddons] = useState<string[]>([]);
+  const [specialInstructions, setSpecialInstructions] = useState<string>("");
+
   useEffect(() => {
     if (tableId) {
       localStorage.setItem("currentTable", tableId);
@@ -119,18 +127,50 @@ const StallDetails: React.FC = () => {
   }, [id, tableId]);
 
   const addToCart = (item: MenuItem) => {
+    setCustomizingItem(item);
+    setSpiceLevel("Medium");
+    setPortion("Standard");
+    setSelectedAddons([]);
+    setSpecialInstructions("");
+  };
+
+  const addCustomizedToCart = () => {
+    if (!customizingItem) return;
+
+    // Compile customized specs
+    const chosenAddons = [
+      ...(portion === "Double" ? [{ name: "Double Portion", price: 40 }] : []),
+      ...selectedAddons.map(name => {
+        let price = 20;
+        if (name === "Fried Egg") price = 15;
+        if (name === "Butter Cube") price = 10;
+        return { name, price };
+      })
+    ];
+
+    const customizationPayload = {
+      spiceLevel,
+      addons: chosenAddons.length > 0 ? chosenAddons : undefined,
+      preference: portion !== "Standard" ? portion : undefined,
+      specialInstructions: specialInstructions.trim() || undefined
+    };
+
     addToCartContext(
-      { id: item.id, itemName: item.itemName, price: item.price },
+      { id: customizingItem.id, itemName: customizingItem.itemName, price: customizingItem.price },
       id || "unknown",
-      stall?.stallName || "Vendor Stall"
+      stall?.stallName || "Vendor Stall",
+      customizationPayload
     );
-    
-    setAddedItems(prev => new Set(prev).add(item.id));
-    addToast("Plate Added to Cart", `${item.itemName} was registered inside Cart list.`, "success");
+
+    const itemId = customizingItem.id;
+    setAddedItems(prev => new Set(prev).add(itemId));
+    addToast("Customized Item Added", `${customizingItem.itemName} added to your cart with selections!`, "success");
+    setCustomizingItem(null);
+
     setTimeout(() => {
       setAddedItems(prev => {
         const next = new Set(prev);
-        next.delete(item.id);
+        next.delete(itemId);
         return next;
       });
     }, 2000);
@@ -486,6 +526,182 @@ const StallDetails: React.FC = () => {
         </div>
 
       </div>
+
+      {/* Dynamic Order Customization Modal Panel (Add-ons & Meal Modifiers) */}
+      <AnimatePresence>
+        {customizingItem && (
+          <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 backdrop-blur-sm" id="customizer-overlay">
+            <motion.div
+              initial={{ scale: 0.93, opacity: 0, y: 15 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.93, opacity: 0, y: 15 }}
+              className="bg-white dark:bg-zinc-900 rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl relative border border-gray-100 dark:border-zinc-800 flex flex-col max-h-[90vh]"
+            >
+              {/* Header block */}
+              <div className="p-6 border-b border-gray-100 dark:border-zinc-800 flex items-center justify-between bg-gray-50 dark:bg-zinc-900">
+                <div>
+                  <h3 className="text-lg font-black text-gray-900 dark:text-zinc-50 uppercase tracking-tight">Customize Dish</h3>
+                  <p className="text-xs text-gray-400 dark:text-zinc-500 mt-1">Personalize your {customizingItem.itemName} specifications</p>
+                </div>
+                <button
+                  onClick={() => setCustomizingItem(null)}
+                  className="p-1.5 hover:bg-gray-100 dark:hover:bg-zinc-800 rounded-full text-gray-400 transition-colors"
+                >
+                  <span className="text-xl font-bold font-mono">✕</span>
+                </button>
+              </div>
+
+              {/* Scrollable specs selection */}
+              <div className="p-6 space-y-6 overflow-y-auto flex-1 text-left">
+                
+                {/* 1. Slice Level Selection */}
+                <div className="space-y-3">
+                  <span className="text-xs font-bold text-gray-400 dark:text-zinc-550 uppercase tracking-wider block">🌶️ Choose Spice Level</span>
+                  <div className="grid grid-cols-4 gap-2">
+                    {["None", "Mild", "Medium", "Hot"].map((lvl) => (
+                      <button
+                        key={lvl}
+                        type="button"
+                        onClick={() => setSpiceLevel(lvl)}
+                        className={`py-2 px-3 text-xs font-bold rounded-2xl border text-center transition-all ${
+                          spiceLevel === lvl
+                            ? "bg-orange-600 text-white border-orange-600 shadow-md shadow-orange-100 dark:shadow-none"
+                            : "bg-white dark:bg-zinc-850 text-gray-700 dark:text-zinc-300 border-gray-100 dark:border-zinc-800 hover:bg-gray-50"
+                        }`}
+                      >
+                        {lvl} {lvl === "Medium" ? "🌶️" : lvl === "Hot" ? "🌶️🌶️" : ""}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 2. Portion sizing configurations */}
+                <div className="space-y-3">
+                  <span className="text-xs font-bold text-gray-400 dark:text-zinc-550 uppercase tracking-wider block">🍽️ Portion Sizing Options</span>
+                  <div className="space-y-2">
+                    {[
+                      { key: "Standard", label: "Standard Culinary Plate", sub: "Regular chef serving proportion", add: 0 },
+                      { key: "Double", label: "Double Portion Upgrade", sub: "2x food quantities, perfect for sharing", add: 40 },
+                      { key: "Diet", label: "Diet Healthy Styling", sub: "Minimal oil/butter alternative cook", add: 0 }
+                    ].map((opt) => (
+                      <label
+                        key={opt.key}
+                        className={`flex items-center justify-between p-3.5 rounded-2xl border cursor-pointer hover:bg-gray-50/50 dark:hover:bg-zinc-850/40 transition-all ${
+                          portion === opt.key
+                            ? "border-orange-600 bg-orange-50/10 dark:bg-orange-950/5"
+                            : "border-gray-100 dark:border-zinc-800"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="radio"
+                            name="portionSelect"
+                            checked={portion === opt.key}
+                            onChange={() => setPortion(opt.key)}
+                            className="text-orange-600 focus:ring-orange-500 h-4 w-4 border-gray-350 bg-white"
+                          />
+                          <div>
+                            <span className="text-xs font-bold text-gray-800 dark:text-zinc-200 block">{opt.label}</span>
+                            <span className="text-[10px] text-gray-400">{opt.sub}</span>
+                          </div>
+                        </div>
+                        {opt.add > 0 && (
+                          <span className="text-xs font-extrabold text-orange-600 dark:text-orange-400 font-mono">+₹{opt.add}.00</span>
+                        )}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 3. Drop down or checkbox additions modifiers */}
+                <div className="space-y-3">
+                  <span className="text-xs font-bold text-gray-400 dark:text-zinc-550 uppercase tracking-wider block">➕ Premium Toppings & Add-ons</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {[
+                      { name: "Extra Cheese", price: 20, desc: "Creamy liquid cheddar" },
+                      { name: "Fried Egg", price: 15, desc: "Runny farm egg yolk" },
+                      { name: "Butter Cube", price: 10, desc: "Pure salted butter melt" }
+                    ].map((addon) => {
+                      const isSelected = selectedAddons.includes(addon.name);
+                      return (
+                        <button
+                          key={addon.name}
+                          type="button"
+                          onClick={() => {
+                            setSelectedAddons(prev =>
+                              prev.includes(addon.name)
+                                ? prev.filter(t => t !== addon.name)
+                                : [...prev, addon.name]
+                            );
+                          }}
+                          className={`p-3 text-left rounded-2xl border transition-all flex flex-col justify-between h-20 ${
+                            isSelected
+                              ? "border-orange-600 bg-orange-50/15 dark:bg-orange-950/10"
+                              : "border-gray-100 dark:border-zinc-800 bg-white dark:bg-zinc-850/50 hover:bg-gray-50"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between w-full">
+                            <span className="text-xs font-extrabold text-gray-800 dark:text-zinc-200">{addon.name}</span>
+                            <span className="text-[11px] font-mono font-bold text-orange-600 dark:text-orange-400">+₹{addon.price}</span>
+                          </div>
+                          <span className="text-[9px] text-gray-400 line-clamp-1">{addon.desc}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 4. Textarea chef instructions */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-gray-400 dark:text-zinc-550 uppercase tracking-wider block">📝 Special Chef Requests</label>
+                  <textarea
+                    rows={2}
+                    value={specialInstructions}
+                    onChange={(e) => setSpecialInstructions(e.target.value)}
+                    placeholder="E.g., No cilantro spice, extra lemons, keep gravy on the side..."
+                    className="w-full text-xs font-semibold p-3.5 bg-gray-50 dark:bg-zinc-850 rounded-2xl border border-gray-100 dark:border-zinc-800 text-gray-800 dark:text-zinc-200 focus:outline-none focus:ring-1 focus:ring-orange-600 leading-relaxed resize-none"
+                  />
+                </div>
+
+              </div>
+
+              {/* Footer pricing total & confirmation */}
+              <div className="p-6 border-t border-gray-100 dark:border-zinc-800 flex items-center justify-between bg-gray-50 dark:bg-zinc-900 gap-4">
+                <div className="text-left">
+                  <span className="text-[9px] font-mono font-black text-gray-400 uppercase tracking-wider block">Estimated Price</span>
+                  <span className="text-xl font-black text-orange-600 dark:text-orange-400 font-mono">
+                    ₹{Number(
+                      customizingItem.price +
+                        (portion === "Double" ? 40 : 0) +
+                        selectedAddons.reduce((sum, name) => {
+                          if (name === "Fried Egg") return sum + 15;
+                          if (name === "Butter Cube") return sum + 10;
+                          return sum + 20; // Cheese
+                        }, 0)
+                    ).toFixed(2)}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setCustomizingItem(null)}
+                    className="px-4 py-2.5 rounded-xl text-xs font-bold bg-white dark:bg-zinc-800 text-gray-500 border border-gray-150 dark:border-zinc-700 hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={addCustomizedToCart}
+                    className="bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-md transition-all animate-none flex items-center gap-1"
+                  >
+                    <span>Add Custom Plate</span>
+                  </button>
+                </div>
+              </div>
+
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
     </div>
   );
